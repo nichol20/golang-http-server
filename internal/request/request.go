@@ -3,6 +3,7 @@ package request
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 )
 
@@ -14,6 +15,21 @@ type RequestLine struct {
 	HttpVersion   string
 	RequestTarget string
 	Method        string
+}
+
+var allowedMethods = map[string]struct{}{
+	http.MethodGet:     {},
+	http.MethodPost:    {},
+	http.MethodPut:     {},
+	http.MethodDelete:  {},
+	http.MethodPatch:   {},
+	http.MethodOptions: {},
+	http.MethodHead:    {},
+}
+
+var supportedVersions = map[string]struct{}{
+	//"1.0": {},
+	"1.1": {},
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
@@ -42,22 +58,32 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 }
 
 func parseRequestLine(requestLineStr string) (*RequestLine, error) {
-	requestLineParts := strings.Split(requestLineStr, " ")
-
-	if len(requestLineParts) != 3 {
+	parts := strings.Fields(requestLineStr)
+	if len(parts) != 3 {
 		return nil, fmt.Errorf("invalid request line")
 	}
 
-	method := requestLineParts[0]
-	requestTarget := requestLineParts[1]
+	method := parts[0]
+	if _, ok := allowedMethods[method]; !ok {
+		return nil, fmt.Errorf("method not allowed")
+	}
 
-	httpVersionParts := strings.Split(requestLineParts[2], "/")
-	if len(httpVersionParts) != 2 {
+	requestTarget := parts[1]
+	if requestTarget == "" {
+		return nil, fmt.Errorf("empty request-target")
+	}
+
+	// HTTP-version must start with "HTTP/"
+	if !strings.HasPrefix(parts[2], "HTTP/") {
 		return nil, fmt.Errorf("invalid http version")
+	}
+	httpVersion := strings.TrimPrefix(parts[2], "HTTP/")
+	if _, ok := supportedVersions[httpVersion]; !ok {
+		return nil, fmt.Errorf("http version %q not supported", httpVersion)
 	}
 
 	return &RequestLine{
-		HttpVersion:   httpVersionParts[1],
+		HttpVersion:   httpVersion,
 		RequestTarget: requestTarget,
 		Method:        method,
 	}, nil
