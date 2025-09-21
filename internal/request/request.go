@@ -96,7 +96,7 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 		HttpVersion:   httpVersion,
 		RequestTarget: requestTarget,
 		Method:        method,
-	}, len(rlStr), nil
+	}, len(rlStr) + len(CRLF), nil
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
