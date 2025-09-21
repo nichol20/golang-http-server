@@ -120,7 +120,6 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 		bufIdx += n
 		bufLen := len(buf)
-		fmt.Println(bufIdx)
 		if bufIdx == bufLen {
 			newSize := bufLen * 2
 			newBuf := make([]byte, newSize)
