@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net"
-	"strings"
+
+	"github.com/nichol20/http-server/internal/request"
 )
 
 func main() {
@@ -22,50 +22,19 @@ func main() {
 		}
 		fmt.Println("A connection has been established!")
 
-		ch := getLinesChannel(conn)
-		for str := range ch {
-			fmt.Printf("read: %s\n", str)
+		req, err := request.RequestFromReader(conn)
+		if err != nil {
+			log.Fatal("Error parsing request: ", err)
 		}
+
+		fmt.Println("Request line:")
+		fmt.Printf(
+			"- Method: %s\n- Target: %s\n- Version: %s\n",
+			req.RequestLine.Method, req.RequestLine.RequestTarget, req.RequestLine.HttpVersion,
+		)
 
 		conn.Close()
 		fmt.Println("A connection has been closed!")
 	}
 
-}
-
-func getLinesChannel(f io.ReadCloser) <-chan string {
-	ch := make(chan string, 1)
-
-	go func() {
-		currentLine := ""
-		buf := make([]byte, 8)
-
-		for {
-			n, err := f.Read(buf)
-			if err != nil && err != io.EOF {
-				log.Fatal("Error reading file: ", err)
-			}
-
-			// nothing more to read
-			if n == 0 {
-				if len(currentLine) > 0 {
-					ch <- currentLine
-				}
-				close(ch)
-				break
-			}
-
-			parts := strings.Split(string(buf[:n]), "\n")
-			currentLine += parts[0]
-
-			for len(parts) > 1 {
-				parts = parts[1:]
-				ch <- currentLine
-				currentLine = ""
-				currentLine += parts[0]
-			}
-		}
-	}()
-
-	return ch
 }
