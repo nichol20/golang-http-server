@@ -3,28 +3,35 @@ package request
 import (
 	"fmt"
 	"io"
-	"net/http"
+	"math"
 	"strings"
 )
 
-type Request struct {
-	RequestLine RequestLine
-}
+type parserState string
+
+const (
+	Initialized parserState = "initialized"
+	Done        parserState = "done"
+)
 
 type RequestLine struct {
 	HttpVersion   string
 	RequestTarget string
 	Method        string
 }
+type Request struct {
+	RequestLine RequestLine
+	ParserState parserState
+}
 
 var allowedMethods = map[string]struct{}{
-	http.MethodGet:     {},
-	http.MethodPost:    {},
-	http.MethodPut:     {},
-	http.MethodDelete:  {},
-	http.MethodPatch:   {},
-	http.MethodOptions: {},
-	http.MethodHead:    {},
+	"GET":     {},
+	"POST":    {},
+	"PUT":     {},
+	"DELETE":  {},
+	"PATCH":   {},
+	"OPTIONS": {},
+	"HEAD":    {},
 }
 
 var supportedVersions = map[string]struct{}{
@@ -32,59 +39,106 @@ var supportedVersions = map[string]struct{}{
 	"1.1": {},
 }
 
-func RequestFromReader(reader io.Reader) (*Request, error) {
-	buf, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("error reading request: %w", err)
-	}
-	requestStr := string(buf)
+const INITIAL_BUFFER_SIZE = 8
+const SEPARATOR = "\r\n"
 
-	splitedReq := strings.Split(requestStr, "\r\n")
-
-	if len(splitedReq) == 0 {
-		return nil, fmt.Errorf("request is empty")
+func (r *Request) parse(data []byte) (int, error) {
+	if r.ParserState == Done {
+		return 0, fmt.Errorf("error: trying to read data in a done state")
 	}
 
-	requestLine, err := parseRequestLine(splitedReq[0])
-	if err != nil {
-		return nil, err
+	if r.ParserState != Initialized {
+		return 0, fmt.Errorf("error: unknown state")
 	}
 
-	request := &Request{
-		RequestLine: *requestLine,
+	rl, consumed, err := parseRequestLine(data)
+	if rl != nil {
+		r.RequestLine = *rl
+		r.ParserState = Done
 	}
-
-	return request, nil
+	return consumed, err
 }
 
-func parseRequestLine(requestLineStr string) (*RequestLine, error) {
-	parts := strings.Fields(requestLineStr)
+func parseRequestLine(data []byte) (*RequestLine, int, error) {
+	dataStr := string(data)
+	if i := strings.Index(dataStr, SEPARATOR); i == -1 {
+		return nil, 0, nil
+	}
+
+	rlStr := strings.Split(dataStr, SEPARATOR)[0]
+
+	returnErr := func(err error) (*RequestLine, int, error) {
+		return nil, 0, err
+	}
+
+	parts := strings.Fields(rlStr)
 	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid request line")
+		return returnErr(ErrMalformedRequestLine)
 	}
 
 	method := parts[0]
 	if _, ok := allowedMethods[method]; !ok {
-		return nil, fmt.Errorf("method not allowed")
+		return returnErr(ErrMethodNotAllowed)
 	}
 
-	requestTarget := parts[1]
-	if requestTarget == "" {
-		return nil, fmt.Errorf("empty request-target")
-	}
-
-	// HTTP-version must start with "HTTP/"
 	if !strings.HasPrefix(parts[2], "HTTP/") {
-		return nil, fmt.Errorf("invalid http version")
+		return returnErr(ErrInvalidHTTPVersion)
 	}
 	httpVersion := strings.TrimPrefix(parts[2], "HTTP/")
 	if _, ok := supportedVersions[httpVersion]; !ok {
-		return nil, fmt.Errorf("http version %q not supported", httpVersion)
+		return returnErr(ErrUnsupportedHTTPVersion)
 	}
+
+	requestTarget := parts[1]
 
 	return &RequestLine{
 		HttpVersion:   httpVersion,
 		RequestTarget: requestTarget,
 		Method:        method,
-	}, nil
+	}, len(rlStr), nil
+}
+
+func RequestFromReader(reader io.Reader) (*Request, error) {
+	request := &Request{
+		ParserState: Initialized,
+	}
+
+	buf := make([]byte, INITIAL_BUFFER_SIZE)
+	bufIdx := 0
+
+	for request.ParserState != Done {
+		n, err := reader.Read(buf[bufIdx:])
+		if err == io.EOF {
+			request.ParserState = Initialized
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error reading data: %w", err)
+		}
+
+		bufIdx += n
+		bufLen := len(buf)
+		fmt.Println(bufIdx)
+		if bufIdx == bufLen {
+			newSize := bufLen * 2
+			newBuf := make([]byte, newSize)
+			copy(newBuf, buf)
+			buf = newBuf
+		}
+
+		consumed, err := request.parse(buf[:bufIdx])
+		if err != nil {
+			return nil, fmt.Errorf("error parsing data: %w", err)
+		}
+
+		bufIdx -= consumed
+		if consumed > 0 {
+			newSize := math.Ceil((float64(bufIdx) / float64(INITIAL_BUFFER_SIZE))) * INITIAL_BUFFER_SIZE
+			newBuf := make([]byte, int(newSize))
+			copy(newBuf, buf[consumed:])
+			buf = newBuf
+		}
+	}
+
+	return request, nil
 }
