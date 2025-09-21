@@ -1,6 +1,7 @@
 package request
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -39,8 +40,8 @@ var supportedVersions = map[string]struct{}{
 	"1.1": {},
 }
 
-const INITIAL_BUFFER_SIZE = 8
-const SEPARATOR = "\r\n"
+const INITIAL_BUFFER_SIZE = 1024
+const CRLF = "\r\n"
 
 func (r *Request) parse(data []byte) (int, error) {
 	if r.ParserState == Done {
@@ -61,11 +62,11 @@ func (r *Request) parse(data []byte) (int, error) {
 
 func parseRequestLine(data []byte) (*RequestLine, int, error) {
 	dataStr := string(data)
-	if i := strings.Index(dataStr, SEPARATOR); i == -1 {
+	if i := strings.Index(dataStr, CRLF); i == -1 {
 		return nil, 0, nil
 	}
 
-	rlStr := strings.Split(dataStr, SEPARATOR)[0]
+	rlStr := strings.Split(dataStr, CRLF)[0]
 
 	returnErr := func(err error) (*RequestLine, int, error) {
 		return nil, 0, err
@@ -108,11 +109,12 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 	for request.ParserState != Done {
 		n, err := reader.Read(buf[bufIdx:])
-		if err == io.EOF {
-			request.ParserState = Initialized
-			break
-		}
+
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				request.ParserState = Initialized
+				break
+			}
 			return nil, fmt.Errorf("error reading data: %w", err)
 		}
 
