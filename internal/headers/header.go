@@ -20,7 +20,7 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		return 0, false, nil
 	}
 	if crlfIdx == 0 {
-		return 0, true, nil
+		return len(CRLF), true, nil
 	}
 
 	fieldLine := dataStr[:crlfIdx]
