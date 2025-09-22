@@ -2,8 +2,8 @@ package header
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
-	"unicode"
 )
 
 const CRLF = "\r\n"
@@ -35,19 +35,22 @@ func (h Header) Parse(data []byte) (n int, done bool, err error) {
 
 	fmt.Printf("Field line: %s\nField name: %s\nField value: %s\n", fieldLine, fieldName, fieldValue)
 
-	f := func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
-	}
-	if strings.IndexFunc(fieldName, f) != -1 {
+	pattern := `^[A-Za-z0-9!#$%&'*+\-.\^_` + "`" + `|~]+$`
+	re := regexp.MustCompile(pattern)
+	if !re.MatchString(fieldName) {
 		return 0, false, fmt.Errorf("invalid field name")
 	}
 
-	if _, exists := h[fieldName]; exists {
-		return 0, false, fmt.Errorf("duplicated headers")
+	consumed := crlfIdx + len(CRLF)
+	loweredFieldName := strings.ToLower(fieldName)
+
+	if _, exists := h[loweredFieldName]; exists {
+		h[loweredFieldName] = h[loweredFieldName] + ", " + strings.TrimSpace(fieldValue)
+		return consumed, false, nil
 	}
 
-	h[fieldName] = strings.ToLower(strings.TrimSpace(fieldValue))
-	return crlfIdx + len(CRLF), false, nil
+	h[loweredFieldName] = strings.TrimSpace(fieldValue)
+	return consumed, false, nil
 }
 
 func (h Header) Get(key string) string {
