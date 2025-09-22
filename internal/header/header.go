@@ -42,6 +42,18 @@ func (h Header) Parse(data []byte) (n int, done bool, err error) {
 		return 0, false, fmt.Errorf("duplicated headers")
 	}
 
-	h[fieldName] = strings.TrimSpace(fieldValue)
+	h[fieldName] = strings.ToLower(strings.TrimSpace(fieldValue))
 	return crlfIdx + len(CRLF), false, nil
+}
+
+func (h Header) Get(key string) string {
+	value, ok := h[strings.ToLower(key)]
+	if !ok {
+		return ""
+	}
+	return value
+}
+
+func (h Header) Set(key, value string) {
+	h[key] = strings.ToLower(value)
 }
