@@ -74,4 +74,12 @@ func TestHeaderParse(t *testing.T) {
 	require.NotNil(t, header)
 	assert.Equal(t, 2, n)
 	assert.True(t, done)
+
+	// Test: Invalid field name
+	header = NewHeader()
+	data = []byte("H©st: localhost:42069\r\n\r\n")
+	n, done, err = header.Parse(data)
+	require.Error(t, err)
+	assert.Equal(t, 0, n)
+	assert.False(t, done)
 }
