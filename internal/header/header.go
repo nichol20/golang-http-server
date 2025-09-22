@@ -1,4 +1,4 @@
-package headers
+package header
 
 import (
 	"fmt"
@@ -7,13 +7,13 @@ import (
 
 const CRLF = "\r\n"
 
-type Headers map[string]string
+type Header map[string]string
 
-func NewHeaders() Headers {
-	return Headers{}
+func NewHeader() Header {
+	return Header{}
 }
 
-func (h Headers) Parse(data []byte) (n int, done bool, err error) {
+func (h Header) Parse(data []byte) (n int, done bool, err error) {
 	dataStr := string(data)
 	crlfIdx := strings.Index(dataStr, CRLF)
 	if crlfIdx == -1 {

@@ -1,4 +1,4 @@
-package headers
+package header
 
 import (
 	"testing"
@@ -7,71 +7,71 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHeadersParse(t *testing.T) {
+func TestHeaderParse(t *testing.T) {
 	// Test: Valid single header
-	headers := NewHeaders()
+	header := NewHeader()
 	data := []byte("Host: localhost:42069\r\n\r\n")
-	n, done, err := headers.Parse(data)
+	n, done, err := header.Parse(data)
 	require.NoError(t, err)
-	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["Host"])
+	require.NotNil(t, header)
+	assert.Equal(t, "localhost:42069", header["Host"])
 	assert.Equal(t, 23, n)
 	assert.False(t, done)
 
 	// Test: Invalid spacing header
-	headers = NewHeaders()
+	header = NewHeader()
 	data = []byte("       Host : localhost:42069       \r\n\r\n")
-	n, done, err = headers.Parse(data)
+	n, done, err = header.Parse(data)
 	require.Error(t, err)
 	assert.Equal(t, 0, n)
 	assert.False(t, done)
 
 	// Test: Valid single header with extra whitespace
-	headers = NewHeaders()
+	header = NewHeader()
 	data = []byte("Host:   localhost:42069\r\n\r\n")
-	n, done, err = headers.Parse(data)
+	n, done, err = header.Parse(data)
 	require.NoError(t, err)
-	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["Host"])
+	require.NotNil(t, header)
+	assert.Equal(t, "localhost:42069", header["Host"])
 	assert.Equal(t, 25, n)
 	assert.False(t, done)
 
-	// Valid 2 headers with existing headers
-	headers = NewHeaders()
+	// Test: Valid 2 headers with existing headers
+	header = NewHeader()
 	data = []byte("Host:   localhost:42069\r\nFoo: bar\r\n\r\n")
-	n, done, err = headers.Parse(data)
+	n, done, err = header.Parse(data)
 	require.NoError(t, err)
-	assert.Equal(t, "localhost:42069", headers["Host"])
+	assert.Equal(t, "localhost:42069", header["Host"])
 	assert.Equal(t, 25, n)
 	assert.False(t, done)
-	n, done, err = headers.Parse(data[n:])
+	n, done, err = header.Parse(data[n:])
 	require.NoError(t, err)
-	assert.Equal(t, "bar", headers["Foo"])
+	assert.Equal(t, "bar", header["Foo"])
 	assert.Equal(t, 10, n)
 	assert.False(t, done)
 
-	// Test: 2 headers with same field value
-	headers = NewHeaders()
+	// Test: 2 headers with same field name
+	header = NewHeader()
 	data = []byte("Host:   localhost:42069\r\nHost:     localhost:42070\r\n\r\n")
-	n, done, err = headers.Parse(data)
+	n, done, err = header.Parse(data)
 	require.NoError(t, err)
 	assert.Equal(t, 25, n)
 	assert.False(t, done)
-	n, done, err = headers.Parse(data[n:])
+	n, done, err = header.Parse(data[n:])
 	require.Error(t, err)
 	assert.Equal(t, 0, n)
 	assert.False(t, done)
 
 	// Test: Valid done
-	headers = NewHeaders()
+	header = NewHeader()
 	data = []byte("Host:   localhost:42069   \r\n\r\n")
-	n, done, err = headers.Parse(data)
+	n, done, err = header.Parse(data)
 	require.NoError(t, err)
 	assert.Equal(t, 28, n)
 	assert.False(t, done)
-	n, done, err = headers.Parse(data[n:])
+	n, done, err = header.Parse(data[n:])
 	require.NoError(t, err)
-	require.NotNil(t, headers)
+	require.NotNil(t, header)
 	assert.Equal(t, 2, n)
 	assert.True(t, done)
 }
