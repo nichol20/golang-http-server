@@ -3,6 +3,7 @@ package header
 import (
 	"fmt"
 	"strings"
+	"unicode"
 )
 
 const CRLF = "\r\n"
@@ -34,7 +35,10 @@ func (h Header) Parse(data []byte) (n int, done bool, err error) {
 
 	fmt.Printf("Field line: %s\nField name: %s\nField value: %s\n", fieldLine, fieldName, fieldValue)
 
-	if i := strings.Index(fieldName, " "); i != -1 {
+	f := func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}
+	if strings.IndexFunc(fieldName, f) != -1 {
 		return 0, false, fmt.Errorf("invalid field name")
 	}
 
