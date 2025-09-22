@@ -38,6 +38,10 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		return 0, false, fmt.Errorf("invalid field name")
 	}
 
+	if _, exists := h[fieldName]; exists {
+		return 0, false, fmt.Errorf("duplicated headers")
+	}
+
 	h[fieldName] = strings.TrimSpace(fieldValue)
 	return crlfIdx + len(CRLF), false, nil
 }
