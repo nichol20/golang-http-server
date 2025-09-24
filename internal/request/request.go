@@ -6,13 +6,16 @@ import (
 	"io"
 	"math"
 	"strings"
+
+	"github.com/nichol20/http-server/internal/header"
 )
 
 type parserState string
 
 const (
-	Initialized parserState = "initialized"
-	Done        parserState = "done"
+	Initialized   parserState = "initialized"
+	ParsingHeader parserState = "parsing_header"
+	Done          parserState = "done"
 )
 
 type RequestLine struct {
@@ -22,6 +25,7 @@ type RequestLine struct {
 }
 type Request struct {
 	RequestLine RequestLine
+	Header      header.Header
 	ParserState parserState
 }
 
@@ -48,16 +52,24 @@ func (r *Request) parse(data []byte) (int, error) {
 		return 0, fmt.Errorf("error: trying to read data in a done state")
 	}
 
-	if r.ParserState != Initialized {
-		return 0, fmt.Errorf("error: unknown state")
+	if r.ParserState == Initialized {
+		rl, consumed, err := parseRequestLine(data)
+		if rl != nil {
+			r.RequestLine = *rl
+			r.ParserState = ParsingHeader
+		}
+		return consumed, err
 	}
 
-	rl, consumed, err := parseRequestLine(data)
-	if rl != nil {
-		r.RequestLine = *rl
-		r.ParserState = Done
+	if r.ParserState == ParsingHeader {
+		consumed, done, err := r.Header.Parse(data)
+		if done {
+			r.ParserState = Done
+		}
+		return consumed, err
 	}
-	return consumed, err
+
+	return 0, fmt.Errorf("error: unkown state")
 }
 
 func parseRequestLine(data []byte) (*RequestLine, int, error) {
@@ -101,6 +113,8 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
 	request := &Request{
+		RequestLine: RequestLine{},
+		Header:      header.NewHeader(),
 		ParserState: Initialized,
 	}
 
@@ -110,11 +124,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	for request.ParserState != Done {
 		n, err := reader.Read(buf[bufIdx:])
 
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				request.ParserState = Initialized
-				break
-			}
+		if err != nil && !errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("error reading data: %w", err)
 		}
 
@@ -132,13 +142,13 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			return nil, fmt.Errorf("error parsing data: %w", err)
 		}
 
-		bufIdx -= consumed
 		if consumed > 0 {
 			newSize := math.Ceil((float64(bufIdx) / float64(INITIAL_BUFFER_SIZE))) * INITIAL_BUFFER_SIZE
 			newBuf := make([]byte, int(newSize))
 			copy(newBuf, buf[consumed:])
 			buf = newBuf
 		}
+		bufIdx -= consumed
 	}
 
 	return request, nil
