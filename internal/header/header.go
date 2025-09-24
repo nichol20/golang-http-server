@@ -33,24 +33,14 @@ func (h Header) Parse(data []byte) (n int, done bool, err error) {
 	}
 	fieldName, fieldValue := fieldLine[:colIdx], fieldLine[colIdx+1:]
 
-	fmt.Printf("Field line: %s\nField name: %s\nField value: %s\n", fieldLine, fieldName, fieldValue)
-
 	pattern := `^[A-Za-z0-9!#$%&'*+\-.\^_` + "`" + `|~]+$`
 	re := regexp.MustCompile(pattern)
 	if !re.MatchString(fieldName) {
 		return 0, false, fmt.Errorf("invalid field name")
 	}
 
-	consumed := crlfIdx + len(CRLF)
-	loweredFieldName := strings.ToLower(fieldName)
-
-	if _, exists := h[loweredFieldName]; exists {
-		h[loweredFieldName] = h[loweredFieldName] + ", " + strings.TrimSpace(fieldValue)
-		return consumed, false, nil
-	}
-
-	h[loweredFieldName] = strings.TrimSpace(fieldValue)
-	return consumed, false, nil
+	h.Set(fieldName, strings.TrimSpace(fieldValue))
+	return crlfIdx + len(CRLF), false, nil
 }
 
 func (h Header) Get(key string) string {
@@ -62,5 +52,10 @@ func (h Header) Get(key string) string {
 }
 
 func (h Header) Set(key, value string) {
-	h[key] = strings.ToLower(value)
+	loweredKey := strings.ToLower(key)
+	if _, exists := h[loweredKey]; exists {
+		h[loweredKey] = fmt.Sprintf("%s, %s", h[loweredKey], value)
+	} else {
+		h[loweredKey] = value
+	}
 }
