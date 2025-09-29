@@ -14,7 +14,7 @@ func NewHeader() Header {
 	return Header{}
 }
 
-func (h Header) Parse(data []byte) (n int, done bool, err error) {
+func (h Header) parseSingle(data []byte) (n int, done bool, err error) {
 	dataStr := string(data)
 	crlfIdx := strings.Index(dataStr, CRLF)
 	if crlfIdx == -1 {
@@ -43,6 +43,24 @@ func (h Header) Parse(data []byte) (n int, done bool, err error) {
 	return crlfIdx + len(CRLF), false, nil
 }
 
+func (h Header) Parse(data []byte) (n int, done bool, err error) {
+	total := 0
+
+	for {
+		n, done, err := h.parseSingle(data[total:])
+		if n <= 0 {
+			return total, done, err
+		}
+		if err != nil {
+			return 0, done, err
+		}
+		total += n
+		if done {
+			return total, done, err
+		}
+	}
+}
+
 func (h Header) Get(key string) string {
 	value, ok := h[strings.ToLower(key)]
 	if !ok {
@@ -54,6 +72,7 @@ func (h Header) Get(key string) string {
 func (h Header) Set(key, value string) {
 	loweredKey := strings.ToLower(key)
 	if _, exists := h[loweredKey]; exists {
+		// space between commas is optional
 		h[loweredKey] = fmt.Sprintf("%s, %s", h[loweredKey], value)
 	} else {
 		h[loweredKey] = value
