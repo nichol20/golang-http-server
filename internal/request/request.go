@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/nichol20/http-server/internal/header"
@@ -15,6 +16,7 @@ type parserState string
 const (
 	Initialized   parserState = "initialized"
 	ParsingHeader parserState = "parsing_header"
+	ParsingBody   parserState = "parsing_body"
 	Done          parserState = "done"
 )
 
@@ -24,9 +26,10 @@ type RequestLine struct {
 	Method        string
 }
 type Request struct {
+	ParserState parserState
 	RequestLine RequestLine
 	Header      header.Header
-	ParserState parserState
+	Body        []byte
 }
 
 var allowedMethods = map[string]struct{}{
@@ -48,28 +51,46 @@ const INITIAL_BUFFER_SIZE = 1024
 const CRLF = "\r\n"
 
 func (r *Request) parse(data []byte) (int, error) {
-	if r.ParserState == Done {
-		return 0, fmt.Errorf("error: trying to read data in a done state")
-	}
-
-	if r.ParserState == Initialized {
+	switch r.ParserState {
+	case Initialized:
 		rl, consumed, err := parseRequestLine(data)
 		if rl != nil {
 			r.RequestLine = *rl
 			r.ParserState = ParsingHeader
 		}
 		return consumed, err
-	}
 
-	if r.ParserState == ParsingHeader {
+	case ParsingHeader:
 		consumed, done, err := r.Header.Parse(data)
 		if done {
-			r.ParserState = Done
+			// I'm assuming that if there is no content-length there will be no body
+			if len(r.Header.Get("content-length")) == 0 {
+				r.ParserState = Done
+			} else {
+				r.ParserState = ParsingBody
+			}
 		}
 		return consumed, err
-	}
 
-	return 0, fmt.Errorf("error: unkown state")
+	case ParsingBody:
+		contentLen, err := strconv.Atoi(r.Header.Get("content-length"))
+		if err != nil {
+			return 0, fmt.Errorf("invalid content length")
+		}
+		r.Body = append(r.Body, data...)
+		if len(r.Body) > contentLen {
+			return 0, fmt.Errorf("the body size is larger than the content length specified in the header")
+		}
+		if len(r.Body) == contentLen {
+			r.ParserState = Done
+		}
+		return len(data), nil
+
+	case Done:
+		return 0, fmt.Errorf("error: trying to read data in a done state")
+	default:
+		return 0, fmt.Errorf("error: unkown state")
+	}
 }
 
 func parseRequestLine(data []byte) (*RequestLine, int, error) {
@@ -113,19 +134,25 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
 	request := &Request{
+		ParserState: Initialized,
 		RequestLine: RequestLine{},
 		Header:      header.NewHeader(),
-		ParserState: Initialized,
+		Body:        []byte{},
 	}
 
 	buf := make([]byte, INITIAL_BUFFER_SIZE)
 	bufIdx := 0
-
+	reachedEOF := false
 	for request.ParserState != Done {
+		if reachedEOF {
+			return nil, fmt.Errorf("the request parse has not finished, but there is no more data to read")
+		}
 		n, err := reader.Read(buf[bufIdx:])
-
-		if err != nil && !errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("error reading data: %w", err)
+		reachedEOF = errors.Is(err, io.EOF)
+		if err != nil {
+			if !reachedEOF {
+				return nil, fmt.Errorf("error reading data: %w", err)
+			}
 		}
 
 		bufIdx += n
