@@ -50,7 +50,7 @@ var supportedVersions = map[string]struct{}{
 const INITIAL_BUFFER_SIZE = 1024
 const CRLF = "\r\n"
 
-func (r *Request) parse(data []byte) (int, error) {
+func (r *Request) parseSingle(data []byte) (int, error) {
 	switch r.ParserState {
 	case Initialized:
 		rl, consumed, err := parseRequestLine(data)
@@ -90,6 +90,21 @@ func (r *Request) parse(data []byte) (int, error) {
 		return 0, fmt.Errorf("error: trying to read data in a done state")
 	default:
 		return 0, fmt.Errorf("error: unkown state")
+	}
+}
+
+func (r *Request) parse(data []byte) (int, error) {
+	total := 0
+
+	for {
+		n, err := r.parseSingle(data[total:])
+		if n <= 0 || r.ParserState == Done {
+			return total, err
+		}
+		if err != nil {
+			return 0, err
+		}
+		total += n
 	}
 }
 
