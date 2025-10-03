@@ -69,12 +69,12 @@ func (h Header) Get(key string) string {
 	return value
 }
 
-func (h Header) Set(key, value string) {
+func (h Header) Set(key string, value any) {
 	loweredKey := strings.ToLower(key)
 	if _, exists := h[loweredKey]; exists {
 		// space between commas is optional
 		h[loweredKey] = fmt.Sprintf("%s, %s", h[loweredKey], value)
 	} else {
-		h[loweredKey] = value
+		h[loweredKey] = fmt.Sprintf("%v", value)
 	}
 }

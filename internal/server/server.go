@@ -7,11 +7,12 @@ import (
 	"sync/atomic"
 
 	"github.com/nichol20/http-server/internal/request"
+	"github.com/nichol20/http-server/internal/response"
 )
 
 type Server struct {
 	Addr     string
-	listener net.Listener
+	listener *net.Listener
 	closed   *atomic.Bool
 }
 
@@ -23,7 +24,7 @@ func Serve(port uint16) (*Server, error) {
 	}
 	closed := &atomic.Bool{}
 	closed.Store(false)
-	s := &Server{Addr: addr, listener: listener, closed: closed}
+	s := &Server{Addr: addr, listener: &listener, closed: closed}
 
 	go s.listen()
 
@@ -33,12 +34,12 @@ func Serve(port uint16) (*Server, error) {
 func (s *Server) Close() error {
 	fmt.Println("server closed!")
 	s.closed.Store(false)
-	return s.listener.Close()
+	return (*s.listener).Close()
 }
 
 func (s *Server) listen() {
 	for !s.closed.Load() {
-		conn, err := s.listener.Accept()
+		conn, err := (*s.listener).Accept()
 		if err != nil {
 			log.Fatal("Error accepting connection: ", err)
 		}
@@ -50,11 +51,18 @@ func (s *Server) listen() {
 func (s *Server) handle(conn net.Conn) {
 	_, err := request.RequestFromReader(conn)
 	if err != nil {
-		log.Fatal("Error parsing request: ", err)
+		log.Fatal("error parsing request: ", err)
 	}
 
-	res := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello World!"
-	conn.Write([]byte(res))
+	err = response.WriteStatusLine(conn, 200)
+	if err != nil {
+		log.Fatal("error writing status line: ", err)
+	}
+	header := response.GetDefaultHeaders(0)
+	err = response.WriteHeader(conn, header)
+	if err != nil {
+		log.Fatal("error writing header: ", err)
+	}
 
 	err = conn.Close()
 	if err != nil {
