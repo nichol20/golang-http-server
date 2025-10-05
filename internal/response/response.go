@@ -10,20 +10,20 @@ import (
 type StatusCode uint16
 
 const (
-	OK                    StatusCode = 200
-	BAD_REQUEST           StatusCode = 400
-	INTERNAL_SERVER_ERROR StatusCode = 500
+	StatusOK                  StatusCode = 200
+	StatusBadRequest          StatusCode = 400
+	StatusInternalServerError StatusCode = 500
 )
 
 var reasonPhrases = map[StatusCode]string{
-	OK:                    "OK",
-	BAD_REQUEST:           "Bad Request",
-	INTERNAL_SERVER_ERROR: "Internal Server Error",
+	StatusOK:                  "OK",
+	StatusBadRequest:          "Bad Request",
+	StatusInternalServerError: "Internal Server Error",
 }
 
-func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
+func WriteStatusLine(w io.Writer, statusCode int16) error {
 	rp := ""
-	if v, ok := reasonPhrases[statusCode]; ok {
+	if v, ok := reasonPhrases[StatusCode(statusCode)]; ok {
 		rp = v
 	}
 
@@ -35,7 +35,7 @@ func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
 func GetDefaultHeaders(contentLen int) header.Header {
 	h := header.Header{}
 
-	h.Set("Content-Length", contentLen)
+	h.Set("Content-Length", fmt.Sprintf("%d", contentLen))
 	h.Set("Connection", "close")
 	h.Set("Content-Type", "text/plain")
 
@@ -43,10 +43,11 @@ func GetDefaultHeaders(contentLen int) header.Header {
 }
 
 func WriteHeader(w io.Writer, header header.Header) error {
-	formattedHeaders := ""
+	b := []byte{}
 	for key, value := range header {
-		formattedHeaders += fmt.Sprintf("%s: %s\r\n", key, value)
+		b = fmt.Appendf(b, "%s: %s\r\n", key, value)
 	}
-	_, err := w.Write([]byte(formattedHeaders))
+	b = fmt.Append(b, "\r\n")
+	_, err := w.Write(b)
 	return err
 }

@@ -69,7 +69,7 @@ func (h Header) Get(key string) string {
 	return value
 }
 
-func (h Header) Set(key string, value any) {
+func (h Header) Set(key string, value string) {
 	loweredKey := strings.ToLower(key)
 	if _, exists := h[loweredKey]; exists {
 		// space between commas is optional
