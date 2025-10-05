@@ -14,10 +14,10 @@ import (
 type parserState string
 
 const (
-	Initialized   parserState = "initialized"
-	ParsingHeader parserState = "parsing_header"
-	ParsingBody   parserState = "parsing_body"
-	Done          parserState = "done"
+	StateInitialized   parserState = "initialized"
+	StateParsingHeader parserState = "parsing_header"
+	StateParsingBody   parserState = "parsing_body"
+	StateDone          parserState = "done"
 )
 
 type RequestLine struct {
@@ -52,27 +52,27 @@ const CRLF = "\r\n"
 
 func (r *Request) parseSingle(data []byte) (int, error) {
 	switch r.ParserState {
-	case Initialized:
+	case StateInitialized:
 		rl, consumed, err := parseRequestLine(data)
 		if rl != nil {
 			r.RequestLine = *rl
-			r.ParserState = ParsingHeader
+			r.ParserState = StateParsingHeader
 		}
 		return consumed, err
 
-	case ParsingHeader:
+	case StateParsingHeader:
 		consumed, done, err := r.Header.Parse(data)
 		if done {
 			// I'm assuming that if there is no content-length there will be no body
 			if len(r.Header.Get("content-length")) == 0 {
-				r.ParserState = Done
+				r.ParserState = StateDone
 			} else {
-				r.ParserState = ParsingBody
+				r.ParserState = StateParsingBody
 			}
 		}
 		return consumed, err
 
-	case ParsingBody:
+	case StateParsingBody:
 		contentLen, err := strconv.Atoi(r.Header.Get("content-length"))
 		if err != nil {
 			return 0, fmt.Errorf("invalid content length")
@@ -82,11 +82,11 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			return 0, fmt.Errorf("the body size is larger than the content length specified in the header")
 		}
 		if len(r.Body) == contentLen {
-			r.ParserState = Done
+			r.ParserState = StateDone
 		}
 		return len(data), nil
 
-	case Done:
+	case StateDone:
 		return 0, fmt.Errorf("error: trying to read data in a done state")
 	default:
 		return 0, fmt.Errorf("error: unkown state")
@@ -98,7 +98,7 @@ func (r *Request) parse(data []byte) (int, error) {
 
 	for {
 		n, err := r.parseSingle(data[total:])
-		if n <= 0 || r.ParserState == Done {
+		if n <= 0 || r.ParserState == StateDone {
 			return total, err
 		}
 		if err != nil {
@@ -149,7 +149,7 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
 	request := &Request{
-		ParserState: Initialized,
+		ParserState: StateInitialized,
 		RequestLine: RequestLine{},
 		Header:      header.NewHeader(),
 		Body:        []byte{},
@@ -158,7 +158,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	buf := make([]byte, INITIAL_BUFFER_SIZE)
 	bufIdx := 0
 	reachedEOF := false
-	for request.ParserState != Done {
+	for request.ParserState != StateDone {
 		if reachedEOF {
 			return nil, fmt.Errorf("the request parse has not finished, but there is no more data to read")
 		}
