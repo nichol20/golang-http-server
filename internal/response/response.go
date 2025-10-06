@@ -21,33 +21,60 @@ var reasonPhrases = map[StatusCode]string{
 	StatusInternalServerError: "Internal Server Error",
 }
 
-func WriteStatusLine(w io.Writer, statusCode int16) error {
+type Writer struct {
+	ioWriter io.Writer
+}
+
+func NewWriter(w io.Writer) *Writer {
+	return &Writer{
+		ioWriter: w,
+	}
+}
+
+func (w *Writer) WriteStatusLine(statusCode int16) error {
 	rp := ""
 	if v, ok := reasonPhrases[StatusCode(statusCode)]; ok {
 		rp = v
 	}
-
 	statusLine := fmt.Sprintf("HTTP/1.1 %d %s\r\n", statusCode, rp)
-	_, err := w.Write([]byte(statusLine))
+	_, err := w.ioWriter.Write([]byte(statusLine))
 	return err
 }
 
-func GetDefaultHeaders(contentLen int) header.Header {
-	h := header.Header{}
-
-	h.Set("Content-Length", fmt.Sprintf("%d", contentLen))
-	h.Set("Connection", "close")
-	h.Set("Content-Type", "text/plain")
-
-	return h
-}
-
-func WriteHeader(w io.Writer, header header.Header) error {
+func (w *Writer) WriteHeader(header header.Header) error {
 	b := []byte{}
 	for key, value := range header {
 		b = fmt.Appendf(b, "%s: %s\r\n", key, value)
 	}
 	b = fmt.Append(b, "\r\n")
-	_, err := w.Write(b)
+	_, err := w.ioWriter.Write(b)
 	return err
+}
+
+func (w *Writer) WriteBody(p []byte) (int, error) {
+	return w.ioWriter.Write(p)
+}
+
+func (w *Writer) WriteRespose(statusCode int16, header header.Header, message []byte) error {
+	err := w.WriteStatusLine(statusCode)
+	if err != nil {
+		return fmt.Errorf("error writing status line: %w", err)
+	}
+	err = w.WriteHeader(header)
+	if err != nil {
+		return fmt.Errorf("error writing headers: %w", err)
+	}
+	_, err = w.WriteBody(message)
+	if err != nil {
+		return fmt.Errorf("error writing message: %w", err)
+	}
+	return nil
+}
+
+func GetDefaultHeaders(contentLen int) header.Header {
+	h := header.Header{}
+	h.Set("Content-Length", fmt.Sprintf("%d", contentLen))
+	h.Set("Connection", "close")
+	h.Set("Content-Type", "text/plain")
+	return h
 }
