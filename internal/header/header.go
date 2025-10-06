@@ -78,3 +78,13 @@ func (h Header) Set(key string, value string) {
 		h[loweredKey] = fmt.Sprintf("%v", value)
 	}
 }
+
+func (h Header) Del(key string) {
+	loweredKey := strings.ToLower(key)
+	delete(h, loweredKey)
+}
+
+func (h Header) Replace(key string, value string) {
+	h.Del(key)
+	h.Set(key, value)
+}
