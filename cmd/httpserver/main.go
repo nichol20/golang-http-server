@@ -1,9 +1,13 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"syscall"
 
 	"github.com/nichol20/http-server/internal/request"
@@ -13,24 +17,47 @@ import (
 
 const port = 42069
 
+func templatesDir() string {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		log.Fatal("runtime.Caller failed")
+	}
+	root := filepath.Join(filepath.Dir(thisFile), "..", "..")
+	templates := filepath.Join(root, "internal", "response", "templates")
+	abs, err := filepath.Abs(templates)
+	if err != nil {
+		log.Fatalf("Abs: %v", err)
+	}
+	return abs
+}
+
 func main() {
 	server, err := server.Serve(port, func(w *response.Writer, req *request.Request) {
-		var msg string
 		var statusCode int16
 
 		switch req.RequestLine.RequestTarget {
 		case "/bad-request":
-			msg = "Hello from Bad Request Endpoint"
 			statusCode = 400
 		case "/server-error":
-			msg = "Hello from Server Error Endpoint"
 			statusCode = 500
 		default:
-			msg = "Hello, 世界"
 			statusCode = 200
 		}
 
-		err := w.WriteRespose(statusCode, response.GetDefaultHeaders(len(msg)), []byte(msg))
+		fileName := fmt.Sprintf("%d.html", statusCode)
+		tplDir := templatesDir()
+		body, err := os.ReadFile(filepath.Join(tplDir, fileName))
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.Fatal("error reading file: ", err)
+		}
+
+		log.Println(tplDir)
+		log.Println(err)
+
+		header := response.GetDefaultHeaders(len(body))
+		header.Replace("Content-Type", "text/html")
+
+		err = w.WriteRespose(statusCode, header, body)
 		if err != nil {
 			log.Fatal("error writing response message: ", err)
 		}
