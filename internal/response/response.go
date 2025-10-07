@@ -71,6 +71,14 @@ func (w *Writer) WriteRespose(statusCode int16, header header.Header, message []
 	return nil
 }
 
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	return w.ioWriter.Write([]byte(fmt.Sprintf("%X\r\n%s\r\n", len(p), p)))
+}
+
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	return w.ioWriter.Write([]byte("0\r\n\r\n"))
+}
+
 func GetDefaultHeaders(contentLen int) header.Header {
 	h := header.Header{}
 	h.Set("Content-Length", fmt.Sprintf("%d", contentLen))
