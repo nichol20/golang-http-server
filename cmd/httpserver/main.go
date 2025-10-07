@@ -83,6 +83,7 @@ func serveHTML(w *response.Writer, statusCode int16) {
 	}
 }
 
+// echo -e "GET /httpbin/stream/100 HTTP/1.1\r\nHost: localhost:42069\r\nConnection: close\r\n\r\n" | nc localhost 42069
 func serveChunkedData(w *response.Writer, path string) {
 	header := response.GetDefaultHeaders(0)
 	header.Del("Content-Length")
