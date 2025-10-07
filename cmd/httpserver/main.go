@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/nichol20/http-server/internal/header"
 	"github.com/nichol20/http-server/internal/request"
 	"github.com/nichol20/http-server/internal/response"
 	"github.com/nichol20/http-server/internal/server"
@@ -85,9 +87,11 @@ func serveHTML(w *response.Writer, statusCode int16) {
 
 // echo -e "GET /httpbin/stream/100 HTTP/1.1\r\nHost: localhost:42069\r\nConnection: close\r\n\r\n" | nc localhost 42069
 func serveChunkedData(w *response.Writer, path string) {
-	header := response.GetDefaultHeaders(0)
-	header.Del("Content-Length")
-	header.Set("Transfer-Encoding", "chunked")
+	hdr := response.GetDefaultHeaders(0)
+	hdr.Del("Content-Length")
+	hdr.Set("Transfer-Encoding", "chunked")
+	hdr.Set("Trailer", "X-Content-SHA256")
+	hdr.Set("Trailer", "X-Content-Length")
 
 	resp, err := http.Get(fmt.Sprintf("https://httpbin.org/%s", path))
 	if err != nil {
@@ -105,16 +109,17 @@ func serveChunkedData(w *response.Writer, path string) {
 	if err != nil {
 		log.Fatal("error writing status line: ", err)
 	}
-	err = w.WriteHeader(header)
+	err = w.WriteHeader(hdr)
 	if err != nil {
 		log.Fatal("error writing header: ", err)
 	}
 
 	buf := make([]byte, 1024)
+	body := []byte{}
 	for {
 		n, rerr := resp.Body.Read(buf)
-		log.Println(n)
 		if n > 0 {
+			body = append(body, buf[:n]...)
 			if _, werr := w.WriteChunkedBody(buf[:n]); werr != nil {
 				log.Fatalf("error writing chunk to client: %v", werr)
 			}
@@ -124,6 +129,15 @@ func serveChunkedData(w *response.Writer, path string) {
 			if errors.Is(rerr, io.EOF) {
 				if _, doneErr := w.WriteChunkedBodyDone(); doneErr != nil {
 					log.Fatalf("error writing final chunk done: %v", doneErr)
+				}
+
+				sum := sha256.Sum256(body)
+				trailer := header.Header{}
+				trailer["X-Content-SHA256"] = fmt.Sprintf("%x", sum)
+				trailer["X-Content-Length"] = fmt.Sprintf("%d", len(body))
+
+				if terr := w.WriteTrailer(trailer); terr != nil {
+					log.Fatalf("error writing final chunk done: %v", terr)
 				}
 				return
 			}

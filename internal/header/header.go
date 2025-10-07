@@ -88,3 +88,8 @@ func (h Header) Replace(key string, value string) {
 	h.Del(key)
 	h.Set(key, value)
 }
+
+func (h Header) Values(key string) []string {
+	v := h.Get(key)
+	return strings.Split(v, ", ")
+}

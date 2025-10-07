@@ -79,6 +79,10 @@ func (w *Writer) WriteChunkedBodyDone() (int, error) {
 	return w.ioWriter.Write([]byte("0\r\n\r\n"))
 }
 
+func (w *Writer) WriteTrailer(h header.Header) error {
+	return w.WriteHeader(h)
+}
+
 func GetDefaultHeaders(contentLen int) header.Header {
 	h := header.Header{}
 	h.Set("Content-Length", fmt.Sprintf("%d", contentLen))
