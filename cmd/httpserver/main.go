@@ -25,6 +25,12 @@ const port = 42069
 func main() {
 	server, err := server.Serve(port, func(w *response.Writer, req *request.Request) {
 		rt := req.RequestLine.RequestTarget
+		method := req.RequestLine.Method
+		if method != "GET" {
+			serveHTML(w, 200)
+			return
+		}
+
 		switch {
 		case rt == "/bad-request":
 			serveHTML(w, 400)
@@ -35,6 +41,9 @@ func main() {
 		case strings.HasPrefix(rt, "/httpbin/"):
 			httpbinPath := strings.TrimPrefix(rt, "/httpbin/")
 			serveChunkedData(w, httpbinPath)
+			return
+		case rt == "/video":
+			serveVideo(w)
 			return
 		default:
 			serveHTML(w, 200)
@@ -54,14 +63,29 @@ func main() {
 	log.Println("Server gracefully stopped")
 }
 
-func templatesDir() string {
+func thisFile() string {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		log.Fatal("runtime.Caller failed")
 	}
-	root := filepath.Join(filepath.Dir(thisFile), "..", "..")
+
+	return thisFile
+}
+
+func templatesDir() string {
+	root := filepath.Join(filepath.Dir(thisFile()), "..", "..")
 	templates := filepath.Join(root, "internal", "response", "templates")
 	abs, err := filepath.Abs(templates)
+	if err != nil {
+		log.Fatalf("Abs: %v", err)
+	}
+	return abs
+}
+
+func assetsDir() string {
+	root := filepath.Join(filepath.Dir(thisFile()), "..", "..")
+	assets := filepath.Join(root, "assets")
+	abs, err := filepath.Abs(assets)
 	if err != nil {
 		log.Fatalf("Abs: %v", err)
 	}
@@ -142,6 +166,68 @@ func serveChunkedData(w *response.Writer, path string) {
 				return
 			}
 			log.Fatalf("error reading upstream body: %v", rerr)
+		}
+	}
+}
+
+func serveVideo(w *response.Writer) {
+	f, err := os.Open(filepath.Join(assetsDir(), "video.mp4"))
+	if err != nil {
+		log.Printf("error opening video file: %v", err)
+		serveHTML(w, 500)
+		return
+	}
+	defer f.Close()
+
+	fi, err := f.Stat()
+	if err != nil {
+		log.Printf("error stating video file: %v", err)
+		serveHTML(w, 500)
+		return
+	}
+	size := fi.Size()
+
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		log.Printf("error seeking video file: %v", err)
+		serveHTML(w, 500)
+		return
+	}
+
+	hdr := response.GetDefaultHeaders(int(size))
+	hdr.Replace("Content-Type", "video/mp4")
+	hdr.Set("Accept-Ranges", "bytes")
+
+	if err := w.WriteStatusLine(200); err != nil {
+		log.Printf("error writing status line for video: %v", err)
+		return
+	}
+	if err := w.WriteHeader(hdr); err != nil {
+		log.Printf("error writing headers for video: %v", err)
+		return
+	}
+
+	buf := make([]byte, 32*1024) // 32KB
+	for {
+		n, rerr := f.Read(buf)
+		if n > 0 {
+			if _, werr := w.WriteBody(buf[:n]); werr != nil {
+				if errors.Is(werr, syscall.EPIPE) || errors.Is(werr, syscall.ECONNRESET) ||
+					strings.Contains(werr.Error(), "use of closed network connection") ||
+					strings.Contains(werr.Error(), "connection reset by peer") {
+					log.Printf("client disconnected while streaming video: %v", werr)
+					return
+				}
+				log.Printf("error writing video chunk: %v", werr)
+				return
+			}
+		}
+		if rerr != nil {
+			if errors.Is(rerr, io.EOF) {
+				log.Println("finished streaming video")
+				return
+			}
+			log.Printf("error reading video file: %v", rerr)
+			return
 		}
 	}
 }
