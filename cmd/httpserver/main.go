@@ -211,12 +211,6 @@ func serveVideo(w *response.Writer) {
 		n, rerr := f.Read(buf)
 		if n > 0 {
 			if _, werr := w.WriteBody(buf[:n]); werr != nil {
-				if errors.Is(werr, syscall.EPIPE) || errors.Is(werr, syscall.ECONNRESET) ||
-					strings.Contains(werr.Error(), "use of closed network connection") ||
-					strings.Contains(werr.Error(), "connection reset by peer") {
-					log.Printf("client disconnected while streaming video: %v", werr)
-					return
-				}
 				log.Printf("error writing video chunk: %v", werr)
 				return
 			}
